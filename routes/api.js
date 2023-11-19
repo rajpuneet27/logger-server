@@ -1,31 +1,36 @@
 const express = require("express");
 
 const router = express.Router();
+const axios = require('axios');
 
-const CartItems = require("../models/logs")
+const config = require("./../config/config")
+const logs = require("../models/logs");
+const { Client } = require('@elastic/elasticsearch');
+const { v4: uuidv4 } = require('uuid');
+
+// Create an Elasticsearch client instance
+const elasticClient = new Client({ node: 'https://localhost:9200' });
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
 //Routes
-router.get('/something',(req,res)=>{
-    res.json({message:"something"});
+router.get('/',(req,res)=>{
+    res.json({message:"Server is connected!"});
 })
 
-// Search logs endpoint
+router.get('/logs', async (req, res) => {
+  try {
+    const allLogs = await logs.findAll();
+
+    res.json({ success: true, log: allLogs });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
 app.get('/search-logs', async (req, res) => {
     try {
       const { q } = req.query;
-  
-      // Elasticsearch search query
-      const { body } = await elasticClient.search({
-        index: 'your_index_name',
-        body: {
-          query: {
-            multi_match: {
-              query: q,
-              fields: ['level', 'message', 'resourceId', 'traceId', 'spanId', 'commit', 'parentResourceId'],
-            },
-          },
-        },
-      });
   
       res.json(body.hits.hits);
     } catch (error) {
@@ -33,36 +38,32 @@ app.get('/search-logs', async (req, res) => {
       res.status(500).json({ error: 'Internal Server Error' });
     }
 });
-  
 
 // Log ingestion endpoint
-app.post('/log', async (req, res) => {
-    try {
-      const { body } = req;
-  
-      // Save log to SQL database
-      const savedLog = await Log.create({
-        level: body.level,
-        message: body.message,
-        resourceId: body.resourceId,
-        timestamp: body.timestamp,
-        traceId: body.traceId,
-        spanId: body.spanId,
-        commit: body.commit,
-        parentResourceId: body.metadata?.parentResourceId || null,
+router.post('/log', async (req, res) => {
+  try {
+    const logsData = req.body;
+    console.log(logsData)
+    const savedLogs = await Promise.all(logsData.map(async (logData) => {
+      const savedLog = await logs.create({
+        id: uuidv4(),
+        level: logData.level,
+        message: logData.message,
+        resourceId: logData.resourceId,
+        timestamp: logData.timestamp,
+        traceId: logData.traceId,
+        spanId: logData.spanId,
+        commit: logData.commit,
+        parentResourceId: logData.metadata?.parentResourceId || null,
       });
-  
-      // Index log in Elasticsearch
-      await elasticClient.index({
-        index: 'your_index_name',
-        body: savedLog.toJSON(),
-      });
-  
-      res.json({ success: true, log: savedLog });
-    } catch (error) {
-      console.error(error);
-      res.status(500).json({ error: 'Internal Server Error' });
-    }
+      return savedLog;
+    }));
+
+    res.json({ success: true, logs: savedLogs });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
 });
 
 module.exports = router;
