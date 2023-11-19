@@ -1,16 +1,10 @@
 const express = require("express");
 
 const router = express.Router();
-const axios = require('axios');
 
 const config = require("./../config/config")
-const logs = require("../models/logs");
-const { Client } = require('@elastic/elasticsearch');
+const Log = require("../models/logs");
 const { v4: uuidv4 } = require('uuid');
-
-// Create an Elasticsearch client instance
-const elasticClient = new Client({ node: 'https://localhost:9200' });
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
 //Routes
 router.get('/',(req,res)=>{
@@ -18,52 +12,75 @@ router.get('/',(req,res)=>{
 })
 
 router.get('/logs', async (req, res) => {
-  try {
-    const allLogs = await logs.findAll();
+  Log.find({ })
+  .then((data) => {
+      res.json(data);
+  })
+  .catch((error) => {
+      console.log("error: ", error);
+  })
+});
 
-    res.json({ success: true, log: allLogs });
+router.get('/search', async (req, res) => {
+  try {
+    let key = req.query.key;
+    const keyword = req.query.keyword;
+
+    const query = {};
+    query[key] = new RegExp(keyword, 'i');
+
+    const logs = await Log.find(query);
+
+    res.json({ success: true, logs });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });
 
-app.get('/search-logs', async (req, res) => {
-    try {
-      const { q } = req.query;
-  
-      res.json(body.hits.hits);
-    } catch (error) {
-      console.error(error);
-      res.status(500).json({ error: 'Internal Server Error' });
-    }
-});
+router.post('/save', (req, res) => {
+  const dataList = req.body;
 
-// Log ingestion endpoint
-router.post('/log', async (req, res) => {
-  try {
-    const logsData = req.body;
-    console.log(logsData)
-    const savedLogs = await Promise.all(logsData.map(async (logData) => {
-      const savedLog = await logs.create({
-        id: uuidv4(),
-        level: logData.level,
-        message: logData.message,
-        resourceId: logData.resourceId,
-        timestamp: logData.timestamp,
-        traceId: logData.traceId,
-        spanId: logData.spanId,
-        commit: logData.commit,
-        parentResourceId: logData.metadata?.parentResourceId || null,
+  // Check if req.body is an array
+  if (!Array.isArray(dataList)) {
+    return res.status(400).json({
+      msg: 'Invalid request body. It should be an array of objects.'
+    });
+  }
+
+  for (const data of dataList) {
+    if (typeof data !== 'object' || data === null) {
+      return res.status(400).json({
+        msg: 'Invalid element in the array. Each element should be an object.'
       });
-      return savedLog;
-    }));
-
-    res.json({ success: true, logs: savedLogs });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Internal Server Error' });
+    }
   }
+
+  const savePromises = dataList.map(data => {
+    const logger = new Log(data);
+    return new Promise((resolve, reject) => {
+      logger.save((error) => {
+        if (error) {
+          reject(error);
+        } else {
+          resolve();
+        }
+      });
+    });
+  });
+
+  Promise.all(savePromises)
+    .then(() => {
+      res.json({
+        msg: 'Successfully saved all data!'
+      });
+    })
+    .catch((error) => {
+      console.error('Error saving data:', error);
+      res.status(500).json({
+        msg: 'Sorry, Internal Server error'
+      });
+    });
 });
 
 module.exports = router;

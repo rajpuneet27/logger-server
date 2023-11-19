@@ -1,54 +1,44 @@
-// models/post.js
-const { DataTypes, Sequelize } = require('sequelize');
-const config = require('./../config/config');
- 
-const logs = config.define('logs', {
-  id:{
-    primaryKey: true,
-    type: DataTypes.UUID,
-    allowNull: false,
-  },
+const mongoose = require('mongoose');
+
+const logSchema = new mongoose.Schema({
+  // _id: String, 
   level: {
-    type: DataTypes.STRING,
-    allowNull: false,
+    type: String,
+    required: true,
   },
   message: {
-    type: DataTypes.STRING,
-    allowNull: false,
+    type: String,
+    required: true,
   },
   resourceId: {
-    type: DataTypes.STRING,
-    allowNull: false,
+    type: String,
+    default: 'unknown',
   },
   timestamp: {
-    type: DataTypes.STRING,
-    allowNull: false,
-    // defaultValue: Sequelize.literal('CURRENT_TIMESTAMP'),
-    // // If you want to include timezone information, use the following option:
-    // timezone: true,
+    type: String,
+    default: Date.now().toString(),
   },
   traceId: {
-    type: DataTypes.STRING,
-    allowNull: false,
+    type: String,
+    default: 'unknown',
   },
   spanId: {
-    type: DataTypes.STRING,
-    allowNull: false,
+    type: String,
+    default: 'unknown',
   },
   commit: {
-    type: DataTypes.STRING,
-    allowNull: false,
+    type: String,
+    default: 'unknown',
   },
-  parentResourceId: {
-    type: DataTypes.STRING,
-    allowNull: false
+  metadata: {
+    type: Object,
+    default: {
+        parentResourceId:{
+          type: String              
+        }
   },
-}, {
-  tableName: 'logs',
-  schema: 'public',
-  timestamps: false,
-  // createdAt: 'createdAt',
-  // updatedAt: 'updated_at',
+}
 });
+const Log = mongoose.model('Log', logSchema);
 
-module.exports = logs;
+module.exports = Log;
